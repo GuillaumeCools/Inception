@@ -1,5 +1,4 @@
 #!/bin/bash
-set -e  # Arrête si une commande échoue
 
 echo "🚀 Lancement de l'installation de WordPress..."
 
@@ -33,62 +32,62 @@ MAX_RETRIES=30
 COUNT=0
 while [ $COUNT -lt $MAX_RETRIES ]; do
     if mysqladmin ping -h"mariadb" -u"$SQL_USER" -p"$SQL_PASSWORD" --silent 2>/dev/null; then
-        echo "✅ Connexion à la base de données établie !"
+        echo "✅ Connexion établie !"
         break
     fi
-    echo "🔄 En attente que MariaDB soit prêt... Tentative $((COUNT + 1))/$MAX_RETRIES"
+    echo "🔄 Tentative $((COUNT + 1))/$MAX_RETRIES"
     sleep 2
     COUNT=$((COUNT + 1))
 done
 
 if [ $COUNT -eq $MAX_RETRIES ]; then
-    echo "❌ Échec de la connexion à la base de données"
+    echo "❌ Échec de la connexion à MariaDB"
     exit 1
 fi
 
 cd /var/www/html
 
-# Vérifier si WordPress est déjà installé
-if ! wp core is-installed --allow-root 2>/dev/null; then
-    echo "📥 Téléchargement de WordPress..."
-    wp core download --version=6.0 --locale=fr_FR --allow-root || {
-        echo "❌ Échec du téléchargement"
-        exit 1
-    }
+# Vérifier si WordPress est installé
+if wp core is-installed --allow-root 2>/dev/null; then
+    echo "✅ WordPress déjà installé"
+else
+    # Télécharger WordPress si pas déjà fait
+    if [ ! -f "wp-settings.php" ]; then
+        echo "📥 Téléchargement de WordPress..."
+        wp core download --version=6.0 --locale=fr_FR --allow-root
+    else
+        echo "📦 Fichiers WordPress déjà présents"
+    fi
 
-    echo "⚙️ Création du fichier wp-config.php..."
-    wp config create --allow-root \
-        --dbname="${SQL_DATABASE}" \
-        --dbuser="${SQL_USER}" \
-        --dbpass="${SQL_PASSWORD}" \
-        --dbhost="mariadb:3306" || {
-        echo "❌ Échec de la création de wp-config.php"
-        exit 1
-    }
+    # Créer wp-config.php si n'existe pas
+    if [ ! -f "wp-config.php" ]; then
+        echo "⚙️ Création de wp-config.php..."
+        wp config create --allow-root \
+            --dbname="${SQL_DATABASE}" \
+            --dbuser="${SQL_USER}" \
+            --dbpass="${SQL_PASSWORD}" \
+            --dbhost="mariadb:3306"
+    fi
 
+    # Installer WordPress
     echo "🛠️ Installation de WordPress..."
     wp core install --allow-root \
         --url="https://${DOMAIN_NAME}" \
         --title="Inception 42" \
         --admin_user="${WP_ADMIN_USER}" \
         --admin_password="${WP_ADMIN_PASSWORD}" \
-        --admin_email="${WP_ADMIN_EMAIL}" || {
-        echo "❌ Échec de l'installation de WordPress"
-        exit 1
-    }
+        --admin_email="${WP_ADMIN_EMAIL}"
 
+    # Créer le 2ème utilisateur
     echo "👤 Création de l'utilisateur ${WP_USER}..."
-    wp user create "${WP_USER}" "${WP_USER_EMAIL}" \
-        --user_pass="${WP_USER_PASSWORD}" \
-        --role=author \
-        --allow-root || {
-        echo "❌ Échec de la création de l'utilisateur"
-        exit 1
-    }
+    if ! wp user get "${WP_USER}" --allow-root 2>/dev/null; then
+        wp user create "${WP_USER}" "${WP_USER_EMAIL}" \
+            --user_pass="${WP_USER_PASSWORD}" \
+            --role=author \
+            --allow-root
+    fi
     
     echo "✅ WordPress installé avec succès !"
-else
-    echo "✅ WordPress est déjà installé."
 fi
 
 # Permissions
