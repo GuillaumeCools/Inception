@@ -1,6 +1,6 @@
 # Variables
 COMPOSE_FILE = srcs/docker-compose.yml
-DATA_PATH = /Users/guillaumecools/data
+DATA_PATH = /home/gcools/data
 
 # Couleurs pour les messages
 GREEN = \033[0;32m
