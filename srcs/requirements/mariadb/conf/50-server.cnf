@@ -1,0 +1,39 @@
+[mysqld]               # Section principale pour le serveur MariaDB
+
+# Exécuter MariaDB sous l’utilisateur mysql pour des raisons de sécurité
+user = mysql
+
+# Port par défaut pour les connexions MySQL
+# port = 3306
+
+# Fichier contenant le PID
+pid-file = /run/mysqld/mysqld.pid
+
+# Répertoire d’installation de MariaDB
+basedir = /usr
+
+# Emplacement des fichiers de données de la base
+datadir = /var/lib/mysql
+
+# Répertoire pour les fichiers temporaires
+tmpdir = /tmp
+
+# Répertoire contenant les fichiers de traduction
+lc-messages-dir = /usr/share/mysql
+
+# Langue utilisée pour les messages du serveur
+lc-messages = en_US
+
+# Désactiver le verrouillage externe
+skip-external-locking
+
+# IMPORTANT : accepter les connexions depuis toutes les interfaces réseau
+# Cela permet aux autres conteneurs Docker de se connecter
+bind-address = 0.0.0.0
+
+# Supprimer automatiquement les anciens logs après 10 jours
+expire_logs_days = 10
+
+# Encodage utilisé par défaut
+character-set-server = utf8mb4
+collation-server = utf8mb4_general_ci
