@@ -1,4 +1,3 @@
-cat > ~/inception/srcs/requirements/wordpress/tools/setup_wordpress.sh << 'EOF'
 #!/bin/bash
 
 echo "🚀 Lancement de l'installation de WordPress..."
