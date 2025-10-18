@@ -1,18 +1,32 @@
+cat > ~/inception/srcs/requirements/mariadb/tools/setup_mariadb.sh << 'EOF'
 #!/bin/bash
 
 echo "🚀 Démarrage de l'initialisation de MariaDB..."
 
+# Les variables du .env sont automatiquement injectées par Docker
+if [ -z "$SQL_DATABASE" ] || [ -z "$SQL_USER" ]; then
+    echo "❌ Variables .env manquantes"
+    echo "SQL_DATABASE=${SQL_DATABASE:-MANQUANT}"
+    echo "SQL_USER=${SQL_USER:-MANQUANT}"
+    exit 1
+fi
+
+echo "✅ Variables .env chargées"
+
 # Charger les secrets
 if [ -f /run/secrets/credentials ]; then
     source /run/secrets/credentials
+    echo "✅ Secrets chargés"
 else
     echo "❌ Fichier secrets non trouvé"
     exit 1
 fi
 
-# Vérification des variables
-if [ -z "$SQL_ROOT_PASSWORD" ] || [ -z "$SQL_DATABASE" ] || [ -z "$SQL_USER" ] || [ -z "$SQL_PASSWORD" ]; then
-    echo "❌ Variables d'environnement requises manquantes."
+# Vérifier les variables sensibles
+if [ -z "$SQL_ROOT_PASSWORD" ] || [ -z "$SQL_PASSWORD" ]; then
+    echo "❌ Variables sensibles manquantes"
+    echo "SQL_ROOT_PASSWORD=${SQL_ROOT_PASSWORD:-MANQUANT}"
+    echo "SQL_PASSWORD=${SQL_PASSWORD:-MANQUANT}"
     exit 1
 fi
 
@@ -46,7 +60,7 @@ fi
 
 echo "✅ MariaDB est prêt. Configuration initiale..."
 
-# Configuration sécurisée (sans mot de passe car première connexion)
+# Configuration sécurisée (première connexion sans mot de passe)
 mysql << EOF
 ALTER USER 'root'@'localhost' IDENTIFIED BY '${SQL_ROOT_PASSWORD}';
 DELETE FROM mysql.user WHERE User='';
@@ -56,7 +70,7 @@ DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';
 FLUSH PRIVILEGES;
 EOF
 
-# Création de la base et de l'utilisateur (AVEC mot de passe root maintenant)
+# Création de la base et de l'utilisateur (avec mot de passe root)
 mysql -u root -p"${SQL_ROOT_PASSWORD}" << EOF
 CREATE DATABASE IF NOT EXISTS \`${SQL_DATABASE}\`;
 CREATE USER IF NOT EXISTS '${SQL_USER}'@'%' IDENTIFIED BY '${SQL_PASSWORD}';
@@ -73,3 +87,6 @@ sleep 2
 # Démarrage en avant-plan
 echo "🔥 Démarrage de MariaDB en mode production..."
 exec mysqld_safe
+EOF
+
+chmod +x ~/inception/srcs/requirements/mariadb/tools/setup_mariadb.sh

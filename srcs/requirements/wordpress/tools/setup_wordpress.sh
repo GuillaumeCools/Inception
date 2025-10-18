@@ -1,51 +1,68 @@
+cat > ~/inception/srcs/requirements/wordpress/tools/setup_wordpress.sh << 'EOF'
 #!/bin/bash
 
 echo "🚀 Lancement de l'installation de WordPress..."
 
-# Charger les secrets
+# Les variables du .env sont automatiquement injectées par Docker
+# On vérifie qu'elles sont bien présentes
+if [ -z "$SQL_DATABASE" ] || [ -z "$SQL_USER" ] || [ -z "$DOMAIN_NAME" ]; then
+    echo "❌ Variables .env manquantes"
+    echo "SQL_DATABASE=${SQL_DATABASE:-MANQUANT}"
+    echo "SQL_USER=${SQL_USER:-MANQUANT}"
+    echo "DOMAIN_NAME=${DOMAIN_NAME:-MANQUANT}"
+    exit 1
+fi
+
+echo "✅ Variables .env chargées"
+
+# Charger les secrets (variables sensibles)
 if [ -f /run/secrets/credentials ]; then
     source /run/secrets/credentials
+    echo "✅ Secrets chargés"
 else
     echo "❌ Fichier secrets non trouvé"
     exit 1
 fi
 
-# S'assure que les variables requises ne soient pas vides
-if [ -z "$SQL_DATABASE" ] || [ -z "$SQL_USER" ] || \
-	[ -z "$SQL_PASSWORD" ] || [ -z "$DOMAIN_NAME" ] || \
-	[ -z "$WP_ADMIN_USER" ] || [ -z "$WP_ADMIN_PASSWORD" ] || \
-	[ -z "$WP_ADMIN_EMAIL" ] || [ -z "$WP_USER" ] || \
-	[ -z "$WP_USER_EMAIL" ] || [ -z "$WP_USER_PASSWORD" ]; then
-    echo "❌ Variables d'environnement requises manquantes."
+# Vérifier que TOUTES les variables sensibles sont présentes
+if [ -z "$SQL_PASSWORD" ] || \
+   [ -z "$WP_ADMIN_USER" ] || [ -z "$WP_ADMIN_PASSWORD" ] || \
+   [ -z "$WP_ADMIN_EMAIL" ] || [ -z "$WP_USER" ] || \
+   [ -z "$WP_USER_EMAIL" ] || [ -z "$WP_USER_PASSWORD" ]; then
+    echo "❌ Variables sensibles manquantes dans secrets"
+    echo "SQL_PASSWORD=${SQL_PASSWORD:-MANQUANT}"
+    echo "WP_ADMIN_USER=${WP_ADMIN_USER:-MANQUANT}"
+    echo "WP_ADMIN_PASSWORD=${WP_ADMIN_PASSWORD:-MANQUANT}"
+    echo "WP_ADMIN_EMAIL=${WP_ADMIN_EMAIL:-MANQUANT}"
+    echo "WP_USER=${WP_USER:-MANQUANT}"
+    echo "WP_USER_EMAIL=${WP_USER_EMAIL:-MANQUANT}"
+    echo "WP_USER_PASSWORD=${WP_USER_PASSWORD:-MANQUANT}"
     exit 1
 fi
 
-# Temps d'attente pour s'assurer que MariaDB est bien lancé
+# Attente de MariaDB
 echo "🔗 Connexion à la base de données..."
-sleep 10
-
-# Vérifie que la base de données est prête à accepter les connexions
 MAX_RETRIES=30
 COUNT=0
 while [ $COUNT -lt $MAX_RETRIES ]; do
-		if mysqladmin ping -h"mariadb" -u"$SQL_USER" -p"$SQL_PASSWORD" --silent; then
-				echo "✅ Connexion à la base de données établie !"
-				break
-		fi
-		echo "🔄 En attente que MariaDB soit prêt... Tentative $((COUNT + 1))/$MAX_RETRIES"
-		sleep 2
-		COUNT=$((COUNT + 1))
+    if mysqladmin ping -h"mariadb" -u"$SQL_USER" -p"$SQL_PASSWORD" --silent; then
+        echo "✅ Connexion à la base de données établie !"
+        break
+    fi
+    echo "🔄 En attente que MariaDB soit prêt... Tentative $((COUNT + 1))/$MAX_RETRIES"
+    sleep 2
+    COUNT=$((COUNT + 1))
 done
 
 if [ $COUNT -eq $MAX_RETRIES ]; then
-		echo "❌ Échec de la connexion à la base de données après $MAX_RETRIES tentatives."
-		exit 1
+    echo "❌ Échec de la connexion à la base de données après $MAX_RETRIES tentatives."
+    exit 1
 fi
 
-# Vérifie si WordPress est déjà installé
-if [ ! -f /var/www/html/wp-config.php ]; then
+# Vérifier si WordPress est déjà installé
+if ! wp core is-installed --allow-root --path="/var/www/html/" 2>/dev/null; then
     echo "📥 Téléchargement de WordPress..."
-    wp core download --version=6.0 --locale=fr_FR --allow-root
+    wp core download --version=6.0 --locale=fr_FR --allow-root --path="/var/www/html/"
 
     echo "⚙️ Création du fichier wp-config.php..."
     wp config create --allow-root \
@@ -57,8 +74,8 @@ if [ ! -f /var/www/html/wp-config.php ]; then
 
     echo "🛠️ Installation de WordPress..."
     wp core install --allow-root \
-        --url="${DOMAIN_NAME}" \
-        --title="Inception42" \
+        --url="https://${DOMAIN_NAME}" \
+        --title="Inception 42" \
         --admin_user="${WP_ADMIN_USER}" \
         --admin_password="${WP_ADMIN_PASSWORD}" \
         --admin_email="${WP_ADMIN_EMAIL}" \
@@ -70,21 +87,25 @@ if [ ! -f /var/www/html/wp-config.php ]; then
         --role=author \
         --allow-root \
         --path="/var/www/html/"
+    
+    echo "✅ WordPress installé avec succès !"
 else
-    echo "WordPress est déjà installé. Aucun changement effectué."
+    echo "✅ WordPress est déjà installé."
 fi
 
-# Création du dossier requis par PHP-FPM si besoin
+# Création du dossier PHP-FPM
 mkdir -p /run/php
 
-# Droits d'accès pour NGINX/PHP
+# Permissions
 chown -R www-data:www-data /var/www/html
 chmod -R 755 /var/www/html
 
-# Supprime le fichier index parasite de NGINX s'il existe
+# Nettoyage
 rm -f /var/www/html/index.nginx-debian.html
 
-# Lancement de PHP-FPM en avant-plan
-echo "🔥 Démarrage de PHP-FPM…"
-sleep 2
+# Lancement de PHP-FPM
+echo "🔥 Démarrage de PHP-FPM..."
 exec php-fpm7.4 -F
+EOF
+
+chmod +x ~/inception/srcs/requirements/wordpress/tools/setup_wordpress.sh
